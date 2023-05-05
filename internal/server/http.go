@@ -1,17 +1,18 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
 )
 
 func NewHTTPServer(addr string) *http.Server {
-	httpServer := NewHTTPServer()
+	httpsrv := newHTTPServer()
 	r := mux.NewRouter()
 
-	r.HandleFunc("/", httpServer.handleProduce).Methods("POST")
-	r.HandleFunc("/", httpServer.handleConsume).Methods("GET")
+	r.HandleFunc("/", httpsrv.handleProduce).Methods("POST")
+	r.HandleFunc("/", httpsrv.handleConsume).Methods("GET")
 
 	return &http.Server{
 		Addr:    addr,
@@ -43,4 +44,58 @@ type ConsumeRequest struct {
 
 type ConsumeResponse struct {
 	Record Record `json:"record"`
+}
+
+func (server *httpServer) handleProduce(response http.ResponseWriter, request *http.Request) {
+	var req ProduceRequest
+	err := json.NewDecoder(request.Body).Decode(&req)
+
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	off, err := server.Log.Append(req.Record)
+
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res := ProduceResponse{Offset: off}
+
+	err = json.NewEncoder(response).Encode(res)
+
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *httpServer) handleConsume(w http.ResponseWriter, r *http.Request) {
+	var req ConsumeRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	record, err := s.Log.Read(req.Offset)
+	if err == ErrOffsetNotFound {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	res := ConsumeResponse{Record: record}
+	err = json.NewEncoder(w).Encode(res)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
