@@ -68,3 +68,30 @@ func testReadAt(t *testing.T, s *store) {
 		off += int64(n)
 	}
 }
+
+func TestStoreClose(t *testing.T) {
+	f, err := ioutil.TempFile("", "store_close_test")
+	require.NoError(t, err)
+
+	defer os.Remove(f.Name())
+
+	s, err := newStore(f)
+	require.NoError(t, err)
+	_, _, err = s.Append(write)
+	require.NoError(t, err)
+
+	f, beforeSize, err := openFile(f.Name())
+	require.NoError(t, err)
+
+	err = s.Close()
+	require.NoError(t, err)
+
+	_, afterSize, err := openFile(f.Name())
+	require.NoError(t, err)
+	require.True(t, afterSize > beforeSize)
+
+}
+
+func openFile(s string) {
+	panic("unimplemented")
+}
